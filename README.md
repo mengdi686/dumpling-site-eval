@@ -2,6 +2,8 @@
 
 纯前端饺子馆选址评估工具。双击 HTML 就能用，不需要 Node 也不需要 Python。
 
+> **仓库约定**：本目录 `dumpling-site-eval/` 是唯一真身；`.trae-cn/skills/dumpling-site-eval` 只是副本，改动后需同步。
+
 ---
 
 ## 这是什么？
