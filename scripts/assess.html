@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>饺子馆选址评估 · v0.1</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    margin: 0; padding: 20px; background: #f5f5f5; color: #333;
+    max-width: 960px; margin: 0 auto;
+  }
+  h1 { font-size: 22px; margin: 0 0 8px; }
+  h2 { font-size: 16px; margin: 24px 0 12px; padding-bottom: 6px; border-bottom: 2px solid #e8e8e8; }
+  h3 { font-size: 14px; margin: 16px 0 8px; color: #555; }
+  .card { background: #fff; border-radius: 10px; padding: 20px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .muted { color: #888; font-size: 12px; }
+  label { display: block; font-size: 13px; margin: 10px 0 4px; color: #444; font-weight: 500; }
+  label .req { color: #d33; }
+  input[type="text"], input[type="number"], select, textarea {
+    width: 100%; padding: 8px 10px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; font-family: inherit;
+  }
+  input:focus, select:focus { border-color: #e67e22; outline: none; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .row-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .btn {
+    display: inline-block; padding: 12px 28px; background: #e67e22; color: #fff; border: none;
+    border-radius: 8px; font-size: 15px; cursor: pointer; font-weight: 600; margin-top: 16px;
+  }
+  .btn:hover { background: #d35400; }
+  .btn-ghost { background: #fff; color: #e67e22; border: 1px solid #e67e22; }
+  .btn-sm { padding: 6px 14px; font-size: 13px; margin-top: 0; }
+  .provider-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .provider-bar select, .provider-bar input { flex: 1; min-width: 180px; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; margin-right: 6px; }
+  .tag-mock { background: #fff3cd; color: #856404; }
+  .tag-amap { background: #d1ecf1; color: #0c5460; }
+  .tag-baidu { background: #d4edda; color: #155724; }
+  .example-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+
+  /* 报告区域 */
+  .verdict-row { display: flex; gap: 16px; align-items: center; }
+  .verdict-big { font-size: 48px; font-weight: 800; line-height: 1; }
+  .verdict-pass { color: #27ae60; }
+  .verdict-warn { color: #f39c12; }
+  .verdict-fail { color: #c0392b; }
+  .score-bar { height: 10px; background: #eee; border-radius: 5px; overflow: hidden; }
+  .score-bar > div { height: 100%; border-radius: 5px; transition: width .6s ease; }
+  .score-item { margin: 8px 0; }
+  .score-head { display: flex; justify-content: space-between; font-size: 13px; }
+  .metric-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .metric-table th, .metric-table td { padding: 8px 10px; border-bottom: 1px solid #eee; text-align: left; }
+  .metric-table th { background: #fafafa; font-weight: 600; }
+  .conf-badge {
+    display: inline-block; padding: 4px 12px; border-radius: 20px; font-weight: 700; font-size: 13px;
+  }
+  .conf-A { background: #27ae60; color: #fff; }
+  .conf-B { background: #f39c12; color: #fff; }
+  .conf-C { background: #e67e22; color: #fff; }
+  .conf-D { background: #c0392b; color: #fff; }
+  .radar-wrap { display: flex; justify-content: center; padding: 12px; }
+  .suggestion-item { padding: 8px 12px; border-left: 3px solid #e67e22; margin: 6px 0; background: #fef9f3; font-size: 13px; }
+  .suggestion-item.good { border-color: #27ae60; background: #f0fff5; }
+  .suggestion-item.bad { border-color: #c0392b; background: #fff5f5; }
+  .warn-note { background: #fff3cd; padding: 10px 14px; border-radius: 6px; border-left: 4px solid #f39c12; font-size: 13px; margin: 8px 0; }
+  .disclaimer { background: #f9f9f9; padding: 14px; border-radius: 8px; font-size: 12px; color: #666; line-height: 1.6; }
+  @media print { body { max-width: none; } .no-print { display: none; } }
+  @media (max-width: 600px) { .row, .row-3 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<!-- ============ 表单 ============ -->
+<section id="form-section" class="card">
+  <h1>🥟 饺子馆选址评估 <span class="muted">· MVP v0.1</span></h1>
+  <p class="muted">纯零基础老板版 · 四维度打分 · 单文件 HTML 报告可分享</p>
+
+  <div class="provider-bar" style="margin:14px 0; padding:12px; background:#fafafa; border-radius:8px;">
+    <label style="margin:0 6px 0 0;">数据源</label>
+    <select id="provider-select" style="max-width:160px;" onchange="toggleKeyInputs()">
+      <option value="mock">🟢 Mock（离线可跑，推荐）</option>
+      <option value="amap">🟡 高德 Web API</option>
+      <option value="baidu">🔵 百度 Place API</option>
+    </select>
+    <input type="text" id="amap-key" placeholder="高德 Key（留空则回落 Mock）" style="max-width:280px; display:none;">
+    <input type="text" id="baidu-key" placeholder="百度 Key（留空则回落 Mock）" style="max-width:280px; display:none;">
+    <span id="provider-status" class="tag tag-mock">当前：Mock 模拟数据</span>
+    <label style="margin-left:16px;">精度</label>
+    <select id="tier-select" style="max-width:140px;">
+      <option value="basic">Basic 精简版（8 次调用）</option>
+      <option value="plus">Plus 增强版（多环+全量）</option>
+    </select>
+  </div>
+
+  <div class="warn-note" style="background:#fafafa;border-left:3px solid #aaa;padding:8px 12px;margin:8px 0;border-radius:4px;">
+    📌 Basic 模式：住宅小区 / 商务写字楼 / 学校 / 餐饮 / 地铁站 共 5 类各查 1 次 + 竞品明细 1 页。单点位 <b>8 次调用</b>（含 geocode + reverse_geocode）。Plus 模式：多环 + 竞品全量 + 商圈 AOI，调用量 ≤ 30 次。
+  </div>
+
+  <div class="example-bar">
+    <span class="muted">快速载入示例：</span>
+    <button class="btn btn-sm btn-ghost" onclick="loadExample('good')">① 社区旺铺·高分</button>
+    <button class="btn btn-sm btn-ghost" onclick="loadExample('warn')">② 商圈中等·谨慎</button>
+    <button class="btn btn-sm btn-ghost" onclick="loadExample('bad')">③ 偏远冷门·不建议</button>
+    <button class="btn btn-sm btn-ghost" onclick="loadExample('missing')">④ 缺客流·置信度B</button>
+  </div>
+
+  <form id="assess-form">
+    <h3>📍 必填 4 项 + 租金可选</h3>
+    <label>地址 <span class="req">*</span>（街道+门牌号，或直接填经纬度）</label>
+    <input type="text" id="f-address" placeholder="例如：北京市朝阳区建国路 88 号" required>
+
+    <div class="row">
+      <div>
+        <label>月租金（元/月，<b>可选</b> · 留空则不评估财务维度）</label>
+        <input type="number" id="f-rent" placeholder="例如 8000">
+      </div>
+      <div>
+        <label>面积 <span class="req">*</span>（㎡）</label>
+        <input type="number" id="f-area" placeholder="例如 80">
+      </div>
+    </div>
+
+    <label>四时段蹲点客流 <span class="req">*</span>（人/分钟，高峰 30 分钟均值。不填则置信度降为 B）</label>
+    <div class="row-3">
+      <div><label class="muted">工作日午市</label><input type="number" id="f-wd-lunch" step="0.1" placeholder="例如 8"></div>
+      <div><label class="muted">工作日晚市</label><input type="number" id="f-wd-dinner" step="0.1" placeholder="例如 10"></div>
+      <div><label class="muted">周末午市</label><input type="number" id="f-we-lunch" step="0.1" placeholder="例如 12"></div>
+      <div><label class="muted">周末晚市</label><input type="number" id="f-we-dinner" step="0.1" placeholder="例如 14"></div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>动线可达性 <span class="req">*</span></label>
+        <select id="f-walk">
+          <option value="direct">地铁直连 · 无绕行</option>
+          <option value="detour_le_100">需绕行 ≤ 100m</option>
+          <option value="detour_gt_100">需绕行 > 100m</option>
+          <option value="no_subway">无地铁</option>
+        </select>
+      </div>
+      <div>
+        <label>主干道可见性</label>
+        <select id="f-road">
+          <option value="main_road_with_display">临主干道 · 有门头展示</option>
+          <option value="main_road_no_display">临主干道 · 无门头展示</option>
+          <option value="not_main_road">不临主干道</option>
+        </select>
+      </div>
+    </div>
+
+    <h3>📝 选填 6 项（用于建议更精准）</h3>
+    <div class="row-3">
+      <div><label class="muted">客单价（元）</label><input type="number" id="f-price" placeholder="默认 30"></div>
+      <div><label class="muted">堂食:外卖</label><input type="text" id="f-dine_take" placeholder="默认 60:40"></div>
+      <div><label class="muted">总预算（万元）</label><input type="number" id="f-budget" placeholder="例如 10"></div>
+      <div><label class="muted">转让费（万元）</label><input type="number" id="f-transfer"></div>
+      <div><label class="muted">自营/加盟</label>
+        <select id="f-mode">
+          <option value="self">自营</option><option value="franchise">加盟</option>
+        </select>
+      </div>
+      <div><label class="muted">餐饮经验（年）</label><input type="number" id="f-exp" placeholder="例如 0"></div>
+    </div>
+
+    <button type="button" class="btn" onclick="runAssessment()">🚀 开始评估</button>
+  </form>
+</section>
+
+<!-- ============ 报告 ============ -->
+<div id="report-section" hidden></div>
+
+<script>
+// ============================================================
+//  1. 品类参数卡（与 references/categories/dumpling.json 同步）
+// ============================================================
+const CATEGORY_DATA = {
+  category_id: "dumpling",
+  category_name: "饺子",
+  metrics_conversion_rate: { lunch_order_rate: 0.30, dinner_order_rate: 0.36, dinner_time_factor: 1.2 },
+  financial_constants: {
+    avg_price_default: 30, margin_dinein_default: 0.65, margin_takeout_default: 0.54,
+    labor_estimate_wan: 1.5, utility_estimate_wan: 0.5,
+    fixed_cost_min_wan: 2.5, fixed_cost_max_wan: 5.0,
+    break_even_dinein_min: 120, break_even_dinein_max: 240,
+    break_even_takeout_min: 180, break_even_takeout_max: 350
+  },
+  competitor_keywords: { amap_types: ["饺子店", "面食", "中式快餐"] },
+  size_range: { target_min: 60, target_max: 100 },
+  weights: {
+    demand: 40, location: 25, competition: 20, financial: 15,
+    demand_breakdown: { lunch_units: 15, dinner_units: 15, households: 10 },
+    location_breakdown: { subway_distance: 10, walkability: 10, road_visibility: 5 },
+    competition_breakdown: { density: 10, strength: 10 },
+    financial_breakdown: { rent_ratio: 10, breakeven: 5 }
+  }
+};
+const MODEL_VERSION = "v0.1";
+const EVAL_DATE = new Date().toISOString().slice(0,10);
+
+// ============================================================
+//  2. 坐标系转换 & Haversine
+// ============================================================
+const PI = Math.PI, a = 6378245.0, ee = 0.00669342162296594323;
+function outOfChina(lng, lat) { return !(73.66 < lng && lng < 135.05 && 3.86 < lat && lat < 53.55); }
+function _transformLat(x, y) { let ret = -100 + 2*x + 3*y + 0.2*y*y + 0.1*x*y + 0.2*Math.sqrt(Math.abs(x)); ret += (20*Math.sin(6*x*PI)+20*Math.sin(2*x*PI))*2/3; ret += (20*Math.sin(y*PI)+40*Math.sin(y/3*PI))*2/3; ret += (160*Math.sin(y/12*PI)+320*Math.sin(y*PI/30))*2/3; return ret; }
+function _transformLng(x, y) { let ret = 300 + x + 2*y + 0.1*x*x + 0.1*x*y + 0.1*Math.sqrt(Math.abs(x)); ret += (20*Math.sin(6*x*PI)+20*Math.sin(2*x*PI))*2/3; ret += (20*Math.sin(x*PI)+40*Math.sin(x/3*PI))*2/3; ret += (150*Math.sin(x/12*PI)+300*Math.sin(x/30*PI))*2/3; return ret; }
+function wgs84ToGcj02(lng, lat) {
+  if (outOfChina(lng, lat)) return [lng, lat];
+  let dLat = _transformLat(lng - 105.0, lat - 35.0);
+  let dLng = _transformLng(lng - 105.0, lat - 35.0);
+  const radLat = lat / 180.0 * PI, magic = Math.sin(radLat);
+  dLat = (dLat * 180.0) / ((a * (1 - ee)) / (magic * magic + (1 - ee)) * PI);
+  dLng = (dLng * 180.0) / (a / Math.sqrt(1 - ee * magic * magic) * Math.cos(radLat) * PI);
+  return [lng + dLng, lat + dLat];
+}
+function gcj02ToWgs84(lng, lat) {
+  const [gLng, gLat] = wgs84ToGcj02(lng, lat);
+  return [lng * 2 - gLng, lat * 2 - gLat];
+}
+function gcj02ToBd09(lng, lat) {
+  const z = Math.sqrt(lng*lng + lat*lat) + 0.00002 * Math.sin(lat * PI * 3000 / 180);
+  const theta = Math.atan2(lat, lng) + 0.000003 * Math.cos(lng * PI * 3000 / 180);
+  return [z * Math.cos(theta) + 0.0065, z * Math.sin(theta) + 0.006];
+}
+function bd09ToGcj02(lng, lat) {
+  const x = lng - 0.0065, y = lat - 0.006;
+  const z = Math.sqrt(x*x + y*y) - 0.00002 * Math.sin(y * PI * 3000 / 180);
+  const theta = Math.atan2(y, x) - 0.000003 * Math.cos(x * PI * 3000 / 180);
+  return [z * Math.cos(theta), z * Math.sin(theta)];
+}
+function bd09ToWgs84(lng, lat) { const [gLng, gLat] = bd09ToGcj02(lng, lat); return gcj02ToWgs84(gLng, gLat); }
+
+// Haversine: 接收 [lat, lng]（WGS84），返回米
+function haversine(lat1, lng1, lat2, lng2) {
+  const toRad = d => d * PI / 180;
+  const R = 6371000;
+  const dLat = toRad(lat2 - lat1), dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// ============================================================
+//  3. Provider 接口 + 三种实现
+// ============================================================
+class Provider {
+  async search_poi(lng, lat, radius, types) { throw 'abstract'; }
+  async geocode(address) { throw 'abstract'; }
+  async reverse_geocode(lng, lat) { throw 'abstract'; }
+  name() { return 'Provider'; }
+}
+
+// --- Mock Provider：三套预设场景 + 随机扰动 ---
+const MOCK_SCENES = {
+  community_good: {  // 社区旺铺：住宅多、地铁近、有竞争但不挤
+    name: "社区旺铺·高分场景",
+    pois: {
+      residential_500: { count: 8, sample: 7 },
+      residential_1000: { count: 18, sample: 15 },
+      office_500: { count: 2, sample: 1 },
+      school_500: { count: 3, sample: 3 },
+      mall_500: { count: 1, sample: 0 },
+      subway_500: { count: 2, sample: 2 },
+      competitor_500: { count: 3, sample: 2 }
+    },
+    household_estimate: 3800,
+    nearest_subway_m: 180,
+    competitor_strength: 6.2
+  },
+  business_warn: {  // 商圈中等：竞争多、租金可能偏高
+    name: "商圈中等·谨慎场景",
+    pois: {
+      residential_500: { count: 2, sample: 2 },
+      residential_1000: { count: 6, sample: 5 },
+      office_500: { count: 5, sample: 4 },
+      school_500: { count: 1, sample: 1 },
+      mall_500: { count: 2, sample: 2 },
+      subway_500: { count: 1, sample: 1 },
+      competitor_500: { count: 8, sample: 6 }
+    },
+    household_estimate: 1200,
+    nearest_subway_m: 450,
+    competitor_strength: 7.4
+  },
+  remote_bad: {  // 偏远冷门
+    name: "偏远冷门·不建议场景",
+    pois: {
+      residential_500: { count: 0, sample: 0 },
+      residential_1000: { count: 1, sample: 1 },
+      office_500: { count: 0, sample: 0 },
+      school_500: { count: 0, sample: 0 },
+      mall_500: { count: 0, sample: 0 },
+      subway_500: { count: 0, sample: 0 },
+      competitor_500: { count: 0, sample: 0 }
+    },
+    household_estimate: 200,
+    nearest_subway_m: null,
+    competitor_strength: null
+  }
+};
+
+class MockProvider extends Provider {
+  constructor(scene) { super(); this.scene = scene || "community_good"; }
+  name() { return "mock"; }
+
+  async search_poi(lng, lat, radius, types) {
+    const s = MOCK_SCENES[this.scene];
+    const map = {
+      "住宅小区": radius >= 1000 ? s.pois.residential_1000 : s.pois.residential_500,
+      "住宅": radius >= 1000 ? s.pois.residential_1000 : s.pois.residential_500,
+      "商务办公楼": s.pois.office_500,
+      "写字楼": s.pois.office_500,
+      "学校": s.pois.school_500,
+      "大学": s.pois.school_500,
+      "购物中心": s.pois.mall_500,
+      "商场": s.pois.mall_500,
+      "地铁站": s.pois.subway_500,
+      "轨道交通": s.pois.subway_500,
+      "饺子店,面食,中式快餐": s.pois.competitor_500,
+      "餐饮": s.pois.competitor_500,
+      "饺子店": s.pois.competitor_500
+    };
+    const key = types;
+    const entry = map[key];
+    if (entry) {
+      // 返回 count 条合成 POI（带随机偏移）
+      const out = [];
+      for (let i = 0; i < entry.count; i++) {
+        const a = Math.random() * 2 * PI;
+        const r = Math.random() * radius;
+        out.push({
+          id: "mock_" + i,
+          name: key + "_" + i,
+          lng: lng + r * Math.cos(a) / 111000,
+          lat: lat + r * Math.sin(a) / 111000,
+          rating: (3.5 + Math.random() * 1.8).toFixed(1),
+          comment_num: Math.floor(50 + Math.random() * 800)
+        });
+      }
+      return out;
+    }
+    return [];
+  }
+
+  async geocode(address) {
+    // 根据场景返回硬编码坐标（方便测试）
+    const coords = {
+      community_good: [116.456, 39.921],   // 北京朝阳
+      business_warn: [116.408, 39.914],    // 北京 CBD
+      remote_bad:    [116.800, 40.100]     // 远郊
+    };
+    return { lng: coords[this.scene][0], lat: coords[this.scene][1], formatted_address: address + " (模拟)" };
+  }
+
+  async reverse_geocode(lng, lat) {
+    return { formatted_address: "模拟地址 " + lng.toFixed(4) + "," + lat.toFixed(4), adcode: "000000" };
+  }
+
+  // 额外 mock 方法（非标准 Provider 接口）
+  mockSceneExtra() { return MOCK_SCENES[this.scene]; }
+}
+
+// --- 高德 Provider ---
+class AmapProvider extends Provider {
+  constructor(key) { super(); this.key = key; }
+  name() { return "amap"; }
+  async geocode(address) {
+    if (!this.key) throw new Error("no key");
+    const u = `https://restapi.amap.com/v3/geocode/geo?address=${encodeURIComponent(address)}&key=${this.key}`;
+    const r = await (await fetch(u)).json();
+    if (!r.geocodes || !r.geocodes.length) throw new Error("geocode not found");
+    const [lng, lat] = r.geocodes[0].location.split(",").map(Number);
+    const [wLng, wLat] = gcj02ToWgs84(lng, lat);
+    return { lng: wLng, lat: wLat, formatted_address: r.geocodes[0].formatted_address };
+  }
+  async reverse_geocode(lng, lat) {
+    if (!this.key) throw new Error("no key");
+    const [gLng, gLat] = wgs84ToGcj02(lng, lat);
+    const u = `https://restapi.amap.com/v3/geocode/regeo?location=${gLng},${gLat}&key=${this.key}`;
+    const r = await (await fetch(u)).json();
+    return { formatted_address: (r.regeocode || {}).formatted_address || "", adcode: (r.regeocode || {}).addressComponent?.adcode };
+  }
+  async search_poi(lng, lat, radius, types) {
+    if (!this.key) throw new Error("no key");
+    const [gLng, gLat] = wgs84ToGcj02(lng, lat);
+    const u = `https://restapi.amap.com/v3/place/around?location=${gLng},${gLat}&radius=${radius}&types=${encodeURIComponent(types)}&key=${this.key}&offset=25`;
+    const r = await (await fetch(u)).json();
+    return (r.pois || []).map(p => {
+      const [plng, plat] = p.location.split(",").map(Number);
+      const [wLng, wLat] = gcj02ToWgs84(plng, plat);
+      return {
+        id: p.id, name: p.name, lng: wLng, lat: wLat,
+        rating: p.biz_ext?.rating || null, comment_num: p.biz_ext?.comment_num || null
+      };
+    });
+  }
+}
+
+// --- 百度 Provider ---
+class BaiduProvider extends Provider {
+  constructor(key) { super(); this.key = key; }
+  name() { return "baidu"; }
+  async geocode(address) {
+    if (!this.key) throw new Error("no key");
+    const u = `https://api.map.baidu.com/geocoding/v3/?address=${encodeURIComponent(address)}&output=json&ak=${this.key}`;
+    const r = await (await fetch(u)).json();
+    if (r.status !== 0) throw new Error("geocode failed: " + r.message);
+    const bd = r.result.location;
+    const [gLng, gLat] = bd09ToGcj02(bd.lng, bd.lat);
+    const [wLng, wLat] = gcj02ToWgs84(gLng, gLat);
+    return { lng: wLng, lat: wLat, formatted_address: r.result.formatted_address };
+  }
+  async reverse_geocode(lng, lat) {
+    if (!this.key) throw new Error("no key");
+    const [bLng, bLat] = gcj02ToBd09(...wgs84ToGcj02(lng, lat));
+    const u = `https://api.map.baidu.com/reverse_geocoding/v3/?location=${bLat},${bLng}&output=json&ak=${this.key}`;
+    const r = await (await fetch(u)).json();
+    return { formatted_address: (r.result || {}).formatted_address || "" };
+  }
+  async search_poi(lng, lat, radius, types) {
+    if (!this.key) throw new Error("no key");
+    const [bLng, bLat] = gcj02ToBd09(...wgs84ToGcj02(lng, lat));
+    // 百度 v2 接口：经纬度顺序 lat,lng
+    const u = `https://api.map.baidu.com/place/v2/search?query=${encodeURIComponent(types)}&location=${bLat},${bLng}&radius=${radius}&output=json&ak=${this.key}&page_size=20`;
+    const r = await (await fetch(u)).json();
+    return (r.results || []).map(p => {
+      const [gLng, gLat] = bd09ToGcj02(p.location.lng, p.location.lat);
+      const [wLng, wLat] = gcj02ToWgs84(gLng, gLat);
+      return {
+        id: p.uid, name: p.name, lng: wLng, lat: wLat,
+        rating: p.detail_info?.overall_rating || null,
+        comment_num: p.detail_info?.comment_num || null
+      };
+    });
+  }
+}
+
+// ============================================================
+//  4. 缓存（localStorage）
+// ============================================================
+const CACHE_TTL = 30 * 24 * 3600 * 1000; // 30 天（坐标 500m 网格复用）
+const cache = {
+  _key(prefix, ...parts) { return "dumpling-cache/" + prefix + "/" + parts.join("|"); },
+  get(prefix, ...parts) {
+    try {
+      const raw = localStorage.getItem(this._key(prefix, ...parts));
+      if (!raw) return null;
+      const { v, t } = JSON.parse(raw);
+      if (Date.now() - t > CACHE_TTL) { localStorage.removeItem(this._key(prefix, ...parts)); return null; }
+      return v;
+    } catch { return null; }
+  },
+  set(prefix, value, ...parts) {
+    localStorage.setItem(this._key(prefix, ...parts), JSON.stringify({ v: value, t: Date.now() }));
+  }
+};
+
+async function cachedSearch(provider, lng, lat, radius, types, tier) {
+  tier = tier || "basic";
+  const key = [lng.toFixed(4), lat.toFixed(4), radius, types, provider.name(), tier];
+  const hit = cache.get("poi", ...key);
+  if (hit) { hit.__cached = true; return hit; }
+  const v = await provider.search_poi(lng, lat, radius, types);
+  cache.set("poi", v, ...key);
+  return v;
+}
+
+// ============================================================
+//  5. 核心评估：采集 POI → 计算 16 指标 → 评分 → 结论
+// ============================================================
+
+async function runAssessment() {
+  const form = document.getElementById("assess-form");
+  const data = readForm(form);
+  const reportEl = document.getElementById("report-section");
+  reportEl.hidden = true; reportEl.innerHTML = "<p class='muted'>⏳ 评估中...</p>";
+  reportEl.hidden = false;
+
+  try {
+    // 5a. 选择 provider
+    const ptype = document.getElementById("provider-select").value;
+    const amapKey = document.getElementById("amap-key").value.trim();
+    const baiduKey = document.getElementById("baidu-key").value.trim();
+    let provider, providerName = "mock";
+
+    if (ptype === "amap" && amapKey) {
+      provider = new AmapProvider(amapKey); providerName = "amap";
+    } else if (ptype === "baidu" && baiduKey) {
+      provider = new BaiduProvider(baiduKey); providerName = "baidu";
+    } else {
+      // 根据表单内容智能选 mock 场景（地址里含"CBD"→business_warn，含"远郊/新区"→remote_bad，其他→community_good）
+      let scene = "community_good";
+      const addr = (data.address || "").toLowerCase();
+      if (addr.includes("cbd") || addr.includes("国贸") || addr.includes("金融街")) scene = "business_warn";
+      else if (addr.includes("远郊") || addr.includes("新区") || addr.includes("工业园")) scene = "remote_bad";
+      else if (!data.rent) scene = "community_good"; // 缺租金不影响 scene
+      // 如果用"偏远"相关词
+      if (addr.includes("偏远") || addr.includes("农村")) scene = "remote_bad";
+      provider = new MockProvider(scene); providerName = "mock";
+    }
+
+    // 5b. 解析坐标
+    let wgs;
+    if (/^\d+\.\d+\s*[,，]\s*\d+\.\d+$/.test(data.address.trim())) {
+      const [lng, lat] = data.address.split(/[,，]/).map(Number);
+      wgs = { lng, lat };
+    } else {
+      const cached = cache.get("geocode", data.address, providerName);
+      if (cached) { wgs = cached; wgs.__cached = true; }
+      else { wgs = await provider.geocode(data.address); cache.set("geocode", wgs, data.address, providerName); }
+    }
+
+    // 5c. 采集 POI（压缩为 5 类 basic；plus 模式多环）
+    const tier = document.getElementById("tier-select")?.value || "basic";
+    const poiRadius = (tier === "plus") ? [200, 500, 800, 1500] : [500];
+    const poiTypes = [
+      { key: "residential", types: "住宅小区" },
+      { key: "office",      types: "商务办公楼" },
+      { key: "school",      types: "学校" },
+      { key: "dining",      types: "餐饮服务" },
+      { key: "subway",      types: "地铁站" }
+    ];
+    const pois = {};
+    if (tier === "basic") {
+      // basic 模式：每类只查 500m 一次，总 5 次 + 竞品明细 1 次
+      for (const pt of poiTypes) {
+        pois[pt.key] = await cachedSearch(provider, wgs.lng, wgs.lat, 500, pt.types, tier);
+      }
+      // 竞品明细（同品类：饺子/面食/中式快餐）
+      pois.competitor = await cachedSearch(provider, wgs.lng, wgs.lat, 500, CATEGORY_DATA.competitor_keywords.amap_types.join(","), tier);
+    } else {
+      // plus 模式：多环
+      for (const pt of poiTypes) {
+        pois[pt.key + "_500"]  = await cachedSearch(provider, wgs.lng, wgs.lat, 500,  pt.types, tier);
+        pois[pt.key + "_1000"] = await cachedSearch(provider, wgs.lng, wgs.lat, 1000, pt.types, tier);
+      }
+      pois.competitor = await cachedSearch(provider, wgs.lng, wgs.lat, 500, CATEGORY_DATA.competitor_keywords.amap_types.join(","), tier);
+    }
+    pois.__tier = tier;
+
+    // 额外 mock 场景数据（用于 household_estimate 兜底）
+    const extra = (provider.mockSceneExtra && provider.mockSceneExtra()) || {};
+
+    // 5d. 计算 16 指标
+    const metrics = computeAllMetrics(wgs, pois, data, extra, providerName);
+
+    // 5e. 计算评分
+    const conf = determineConfidence(data);
+    const scores = computeScores(metrics, CATEGORY_DATA, conf);
+    const total = scores._normTotal;
+    const v = verdict(total);
+    // 无租金时调整结论措辞
+    if (!scores._hasRent) {
+      if (total >= 80) v.advice = "位置可行性好；建议补上租金后再评估财务维度";
+      else if (total >= 60) v.advice = "位置有亮点但也有短板；建议补租金后再确认财务安全垫";
+      else v.advice = "位置侧不足以支撑开店判断，建议更换点位";
+    }
+
+    // 5f. 商圈类型
+    const bizType = inferBizType(pois, data);
+
+    // 5g. 渲染报告
+    const reportHTML = renderReport({
+      data, wgs, metrics, scores, total, verdict: v,
+      confidence: conf, bizType, providerName,
+      poiCacheHits: Object.values(pois).filter(p => p.__cached).length,
+      categoryName: CATEGORY_DATA.category_name,
+      modelVersion: MODEL_VERSION, evalDate: EVAL_DATE,
+      extra
+    });
+    reportEl.innerHTML = reportHTML;
+    reportEl.hidden = false;
+
+    // 滚动到报告
+    reportEl.scrollIntoView({ behavior: "smooth" });
+
+    // 下载按钮绑定
+    document.getElementById("download-report")?.addEventListener("click", () => downloadHTML(reportHTML, `饺子选址报告_${data.address.slice(0,15)}_${EVAL_DATE}.html`));
+
+  } catch (e) {
+    reportEl.innerHTML = `<div class="card"><h3>❌ 评估失败</h3><p>${e.message}</p><p class="muted">建议：改用 Mock 数据源，或检查地址格式。</p></div>`;
+    reportEl.hidden = false;
+  }
+}
+
+function readForm(form) {
+  return {
+    address: form["f-address"].value.trim(),
+    rent:    Number(form["f-rent"].value) || null,
+    area:    Number(form["f-area"].value) || null,
+    wd_lunch:  Number(form["f-wd-lunch"].value) || null,
+    wd_dinner: Number(form["f-wd-dinner"].value) || null,
+    we_lunch:  Number(form["f-we-lunch"].value) || null,
+    we_dinner: Number(form["f-we-dinner"].value) || null,
+    walk:   form["f-walk"].value,
+    road:   form["f-road"].value,
+    price:  Number(form["f-price"].value) || null,
+    mode:   form["f-mode"].value,
+    exp:    Number(form["f-exp"].value) || null,
+    budget: Number(form["f-budget"].value) || null,
+    transfer: Number(form["f-transfer"].value) || null
+  };
+}
+
+// ===== 指标计算 =====
+function computeAllMetrics(wgs, pois, data, extra, providerName) {
+  // basic 模式 key；plus 模式带 _500 后缀，统一做 fallback
+  const resiKey = pois.residential_500 ? "residential_500" : "residential";
+  const officeKey = pois.office_500 ? "office_500" : "office";
+  const schoolKey = pois.school_500 ? "school_500" : "school";
+  const diningKey = pois.dining_500 ? "dining_500" : "dining";
+  const subwayKey = pois.subway_500 ? "subway_500" : "subway";
+
+  const house_count_500  = (pois[resiKey] || []).length;
+  const house_count_1000 = pois.residential_1000 ? pois.residential_1000.length : house_count_500;
+  const office_count     = (pois[officeKey] || []).length;
+  const school_count     = (pois[schoolKey] || []).length;
+  const dining_count     = (pois[diningKey] || []).length;
+  const subway_count     = (pois[subwayKey] || []).length;
+  const comp_count       = (pois.competitor || []).length;
+
+  // 7) 500m 家庭户数估算
+  let householdEstimate;
+  if (extra.household_estimate) householdEstimate = extra.household_estimate;
+  else householdEstimate = house_count_500 * 800;
+
+  // 11) 最近地铁距离
+  let nearestSubway = null;
+  if ((pois[subwayKey] || []).length > 0) {
+    nearestSubway = Math.min(...pois[subwayKey].map(s => haversine(wgs.lat, wgs.lng, s.lat, s.lng)));
+  } else if (extra.nearest_subway_m !== undefined) {
+    nearestSubway = extra.nearest_subway_m;
+  }
+
+  // 9) 竞品密度
+  const compDensity = comp_count;
+
+  // 10) 竞品强度：avg(rating) * (comment_num 归一化)
+  let compStrength = null;
+  if (comp_count > 0) {
+    const rated = (pois.competitor || []).filter(p => p.rating);
+    const avgRating = rated.length ? rated.reduce((s,p) => s + Number(p.rating), 0) / rated.length : 0;
+    const comments = (pois.competitor || []).map(p => p.comment_num).filter(Boolean);
+    const avgLog = comments.length ? Math.log(comments.reduce((a,b)=>a+b,0)/comments.length + 1) / Math.log(800) : 1;
+    compStrength = (avgRating * avgLog).toFixed(2);
+  } else if (extra.competitor_strength !== undefined) {
+    compStrength = extra.competitor_strength;
+  }
+
+  // 蹲点客流 → 预期日单量
+  const convRate = CATEGORY_DATA.metrics_conversion_rate;
+  let lunchDailyUnits = null, dinnerDailyUnits = null;
+  const anyFlow = [data.wd_lunch, data.wd_dinner, data.we_lunch, data.we_dinner].some(v => v !== null && v > 0);
+  if (anyFlow) {
+    const avgFlowLunch = avgOrFallback([data.wd_lunch, data.we_lunch], 0);
+    const avgFlowDinner = avgOrFallback([data.wd_dinner, data.we_dinner], 0);
+    lunchDailyUnits = Math.round(avgFlowLunch * 150 * convRate.lunch_order_rate);
+    dinnerDailyUnits = Math.round(avgFlowDinner * 150 * convRate.dinner_order_rate * convRate.dinner_time_factor);
+  }
+
+  // 商圈类型推断（用于缺失客流时的经验区间）
+  const bizType = inferBizType(pois, data);
+
+  // 财务侧（仅当提供租金时计算）
+  const price = data.price || CATEGORY_DATA.financial_constants.avg_price_default;
+  let rentRatio = null;
+  if (data.rent && lunchDailyUnits !== null) {
+    const monthlyRevenue = (lunchDailyUnits + dinnerDailyUnits) * price * 30;
+    rentRatio = data.rent / monthlyRevenue;
+  }
+
+  let breakEvenUnits = null;
+  let fixedCostWan = data.rent ? (data.rent / 10000 + CATEGORY_DATA.financial_constants.labor_estimate_wan + CATEGORY_DATA.financial_constants.utility_estimate_wan)
+                               : (CATEGORY_DATA.financial_constants.fixed_cost_min_wan + CATEGORY_DATA.financial_constants.fixed_cost_max_wan) / 2;
+  const margin = CATEGORY_DATA.financial_constants.margin_dinein_default;
+  breakEvenUnits = Math.round(fixedCostWan * 10000 / (price * margin * 30));
+
+  let breakEvenAchieve = null;
+  if (data.rent && lunchDailyUnits !== null && breakEvenUnits > 0) {
+    breakEvenAchieve = (lunchDailyUnits + dinnerDailyUnits) / breakEvenUnits;
+  }
+
+  return {
+    house_count_500, house_count_1000, office_count, school_count, dining_count, subway_count, comp_count,
+    householdEstimate, nearestSubway, compDensity, compStrength,
+    lunchDailyUnits, dinnerDailyUnits,
+    rentRatio, breakEvenUnits, breakEvenAchieve,
+    price, fixedCostWan,
+    walk: data.walk, road: data.road,
+    hasRent: !!(data.rent && data.rent > 0),
+    dataSource: providerName
+  };
+}
+
+function avgOrFallback(arr, fb) {
+  const valid = arr.filter(v => v !== null && v !== undefined);
+  return valid.length ? valid.reduce((a,b)=>a+b,0) / valid.length : fb;
+}
+
+function inferBizType(pois, data) {
+  const resi = (pois.residential_500 || pois.residential || []).length;
+  const off  = (pois.office_500 || pois.office || []).length;
+  const sch  = (pois.school_500 || pois.school || []).length;
+  const din  = (pois.dining_500  || pois.dining  || []).length;
+  const sub  = (pois.subway_500  || pois.subway  || []).length;
+  const scores = {
+    community: resi * 3 + sch * 2,
+    business:  off  * 3 + sub  * 2,
+    commercial: din * 3
+  };
+  const sorted = Object.entries(scores).sort((a,b)=>b[1]-a[1]);
+  if (sorted.length >= 2 && sorted[0][1] - sorted[1][1] < 1) return "混合";
+  const map = { community: "社区", business: "商务", commercial: "商业" };
+  return map[sorted[0][0]] || "混合";
+}
+
+// ===== 置信度（租金可选，不影响置信度；只看客流） =====
+function determineConfidence(data) {
+  const hasFlow = [data.wd_lunch, data.wd_dinner, data.we_lunch, data.we_dinner].some(v => v !== null && v > 0);
+  return hasFlow ? "A" : "B";
+}
+
+// ===== 分段打分工具 =====
+function scoreByThresholds(value, thresholds, key, isMax) {
+  if (value === null || value === undefined) return 0;
+  for (const t of thresholds) {
+    const ok = isMax ? (value <= t.max && value >= (t.min ?? 0)) : (value >= t.min);
+    if (ok) return t.score;
+  }
+  return 0;
+}
+
+function scoreByMin(value, thresholds) {
+  if (value === null || value === undefined) return 0;
+  // 按 min 倒序找匹配
+  const sorted = [...thresholds].sort((a,b) => b.min - a.min);
+  for (const t of sorted) if (value >= t.min) return t.score;
+  return 0;
+}
+function scoreByMax(value, thresholds) {
+  if (value === null || value === undefined) return 0;
+  const sorted = [...thresholds].sort((a,b) => a.max - b.max);
+  for (const t of sorted) if (value <= t.max) return t.score;
+  return 0;
+}
+
+// ===== 评分主函数 =====
+function computeScores(m, cat, conf) {
+  const W = cat.weights;
+  const res = { demand: 0, location: 0, competition: 0, financial: 0 };
+  const detail = {};
+
+  // --- 需求侧 40 ---
+  let lunchS, dinnerS, houseS;
+  if (conf === "B") {
+    // 缺客流，按商圈类型经验区间估算
+    const biz = m._bizType || "混合";
+    const ranges = { "社区": {lunch:45, dinner:55, houses:2200}, "商务":{lunch:55,dinner:45,houses:1500}, "商业":{lunch:65,dinner:75,houses:1800} };
+    const fb = ranges[biz] || {lunch:50, dinner:55, houses:1800};
+    lunchS  = scoreByMin(fb.lunch,  [ {min:60,score:15},{min:40,score:11},{min:25,score:7},{min:0,score:3} ]);
+    dinnerS = scoreByMin(fb.dinner, [ {min:72,score:15},{min:48,score:11},{min:30,score:7},{min:0,score:3} ]);
+    houseS  = scoreByMin(m.householdEstimate ?? fb.houses, [ {min:3000,score:10},{min:1500,score:7},{min:800,score:4},{min:1,score:1},{min:0,score:0} ]);
+  } else {
+    lunchS  = scoreByMin(m.lunchDailyUnits,  [ {min:60,score:15},{min:40,score:11},{min:25,score:7},{min:0,score:3} ]);
+    dinnerS = scoreByMin(m.dinnerDailyUnits, [ {min:72,score:15},{min:48,score:11},{min:30,score:7},{min:0,score:3} ]);
+    houseS  = scoreByMin(m.householdEstimate, [ {min:3000,score:10},{min:1500,score:7},{min:800,score:4},{min:1,score:1},{min:0,score:0} ]);
+  }
+  res.demand = lunchS + dinnerS + houseS;
+  detail.demand = { lunchS, dinnerS, houseS, max: 40 };
+
+  // --- 位置侧 25 ---
+  let subS, walkS, roadS;
+  if (m.nearestSubway === null) subS = 0;
+  else subS = scoreByMax(m.nearestSubway, [ {max:200,score:10},{max:400,score:7},{max:600,score:4},{max:99999,score:1} ]);
+  const walkMap = { direct:10, detour_le_100:7, detour_gt_100:3, no_subway:2 };
+  walkS = walkMap[m.walk] ?? 0;
+  const roadMap = { main_road_with_display:5, main_road_no_display:2, not_main_road:1 };
+  roadS = roadMap[m.road] ?? 1;
+  res.location = subS + walkS + roadS;
+  detail.location = { subS, walkS, roadS, max: 25 };
+
+  // --- 竞争侧 20 ---
+  let densityS, strengthS;
+  // density: 注意 0 家不给满分（需求未验证）
+  const dc = m.compDensity;
+  if (dc === 0) densityS = 6; else if (dc <= 1) densityS = 10;
+  else if (dc <= 3) densityS = 7; else if (dc <= 6) densityS = 4; else densityS = 1;
+  if (m.compStrength === null) strengthS = (dc === 0) ? 7 : 0;
+  else strengthS = scoreByMin(Number(m.compStrength), [ {min:7.0,score:10},{min:5.0,score:6},{min:3.0,score:3},{min:0.01,score:1},{min:0,score:0} ]);
+  if (dc === 0 && m.compStrength === null) strengthS = 7;
+  res.competition = densityS + strengthS;
+  detail.competition = { densityS, strengthS, max: 20 };
+
+  // --- 财务侧 15（仅当提供租金时计算） ---
+  let rentS = 0, beS = 0;
+  const hasRent = m.hasRent === true;
+  if (hasRent) {
+    rentS = m.rentRatio === null ? 0 : scoreByMax(m.rentRatio, [ {max:0.15,score:10},{max:0.22,score:7},{max:0.30,score:4},{max:99,score:1} ]);
+    beS = m.breakEvenAchieve === null ? 0 : scoreByMin(m.breakEvenAchieve, [ {min:1.5,score:5},{min:1.2,score:3},{min:1.0,score:1},{min:0,score:0} ]);
+  }
+  res.financial = rentS + beS;
+  detail.financial = { rentS, beS, max: hasRent ? 15 : 0, skipped: !hasRent };
+
+  // --- 总分归一化 ---
+  // 无租金时只算三维（满分 85），按比例归一到 100
+  const rawTotal = res.demand + res.location + res.competition + res.financial;
+  const normTotal = hasRent ? rawTotal : Math.round(rawTotal * 100 / 85);
+  res._rawTotal = rawTotal;
+  res._normTotal = normTotal;
+  res._hasRent = hasRent;
+  res.detail = detail;
+  return res;
+}
+
+function verdict(total) {
+  if (total >= 80) return { label: "✅ 建议开", emoji: "✅", cls: "pass", advice: "核心指标均达标，竞品压力可控，财务安全垫充足" };
+  if (total >= 60) return { label: "⚠️ 谨慎",   emoji: "⚠️", cls: "warn", advice: "有短板，建议补足信息后二次评估" };
+  return { label: "❌ 不建议", emoji: "❌", cls: "fail", advice: "至少一个核心维度严重不达标" };
+}
+
+// ============================================================
+//  6. HTML 报告渲染
+// ============================================================
+function renderReport(ctx) {
+  const { data, wgs, metrics, scores, total, verdict: v, confidence: conf, bizType, providerName, evalDate, modelVersion, poiCacheHits, extra } = ctx;
+  const D = scores.detail;
+
+  // —— 优势 & 短板 ——
+  const dims = [
+    {name:"需求侧", score:scores.demand, max:40, key:"demand"},
+    {name:"位置侧", score:scores.location, max:25, key:"location"},
+    {name:"竞争侧", score:scores.competition, max:20, key:"competition"},
+    {name:"财务侧", score:scores.financial, max:15, key:"financial"}
+  ].sort((a,b) => (b.score/b.max) - (a.score/a.max));
+  const strengths = dims.slice(0, 2);
+  const weaknesses = [...dims].reverse().slice(0, 2);
+
+  // —— 建议 ——
+  const suggestions = [];
+  if (scores.demand < 28) suggestions.push("需求侧偏弱：当前点位午/晚高峰预估单量偏低，建议实地再蹲点验证或转向社区型商圈");
+  if (scores.location < 18) {
+    if (D.location.subS <= 4) suggestions.push("地铁距离较远：可达性是饺子店核心客流来源，优先考虑更近地铁口的点位");
+    if (D.location.walkS <= 7) suggestions.push("动线绕行：若有绕行超过 100m，建议评估门头是否需要额外指引招牌");
+  }
+  if (scores.competition < 14) {
+    if (D.competition.densityS <= 4) suggestions.push(`周边同品类 ${metrics.compDensity} 家，竞争密集：要么主打差异化（纯手工/薄皮），要么换点位`);
+    if (D.competition.strengthS <= 3) suggestions.push("竞品口碑弱是机会——如果周边都是 3.x 分的店，你只要做到 4.2 就能拉开差距");
+  }
+  if (scores.financial < 10) {
+    if (D.financial.rentS <= 4) suggestions.push(`租金占比偏高（${(metrics.rentRatio*100).toFixed(1)}%）：建议与房东谈免租期或降租；或者压缩面积控制固定成本`);
+    if (D.financial.beS <= 1) suggestions.push(`盈亏单量达成率仅 ${(metrics.breakEvenAchieve*100).toFixed(0)}%：当前单量覆盖不了固定成本，必须要么提价，要么拉外卖`);
+  }
+  if (conf === "B") suggestions.push("⚠️ 本次未提供蹲点客流，需求侧得分基于商圈经验区间估算——**建议务必亲自蹲点 1 天再做最终决定**");
+  if (!scores._hasRent) suggestions.push("⚠️ 未提供月租金，财务维度未纳入评分。建议补齐租金后重跑——财务侧 15 分可能显著改变总分和结论");
+  if (data.exp === 0) suggestions.push("首次创业：建议找一家现成饺子店打工 1–2 个月，把出餐、备货、高峰节奏摸清楚再开");
+
+  // —— 数据来源标签 ——
+  const dataTag = providerName === "mock"
+    ? `<span class="tag tag-mock">🟢 Mock 模拟数据（离线可跑）</span>`
+    : providerName === "amap"
+      ? `<span class="tag tag-amap">🟡 高德 Web API</span>`
+      : `<span class="tag tag-baidu">🔵 百度 Place API</span>`;
+
+  // —— 置信度（租金可选，不影响置信度；只有 A 完整 / B 缺客流）——
+  const confMap = {
+    A: { cls: "conf-A", text: "A 完整", note: "已提供四时段蹲点客流，所有维度正常计分" },
+    B: { cls: "conf-B", text: "B 缺客流", note: "未填蹲点客流，需求侧按商圈经验区间估算，建议**务必亲自蹲点 1 天验证**" }
+  };
+  const cf = confMap[conf] || confMap.B;
+
+  // —— SVG 雷达图 ——
+  const radarSVG = renderRadarSVG([
+    {label:"需求", val: scores.demand/40, color:"#e67e22"},
+    {label:"位置", val: scores.location/25, color:"#27ae60"},
+    {label:"竞争", val: scores.competition/20, color:"#3498db"},
+    {label:"财务", val: scores.financial/15, color:"#9b59b6"}
+  ]);
+
+  // —— 坐标网格（用于终端结论卡）——
+  const terminalCard = buildTerminalCard(data.address, total, v.emoji, conf, cf.note, scores, D, strengths, weaknesses, suggestions.slice(0, 3));
+
+  // —— 渲染 HTML ——
+  return `
+<!-- 评估入口隐藏，只显示报告 -->
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;">
+    <div>
+      <h1 style="margin:0;">🥟 ${ctx.categoryName}馆选址评估报告</h1>
+      <p class="muted" style="margin:4px 0;">地址：${data.address} · ${evalDate} · ${dataTag}</p>
+    </div>
+    <div class="no-print">
+      <button class="btn btn-ghost btn-sm" onclick="location.reload()">← 重新评估</button>
+      <button class="btn btn-sm" id="download-report">⬇ 下载报告 HTML</button>
+    </div>
+  </div>
+
+  <div class="verdict-row" style="margin-top:16px;">
+    <div class="verdict-big verdict-${v.cls}">${total}</div>
+    <div>
+      <div style="font-size:22px;font-weight:800;">${v.emoji} ${v.label}</div>
+      <div style="margin-top:6px;"><span class="conf-badge ${cf.cls}">置信度 ${cf.text}</span></div>
+      <div class="muted" style="margin-top:6px;">${cf.note}</div>
+      <div class="muted" style="margin-top:4px;">建议：${v.advice}</div>
+    </div>
+  </div>
+</div>
+
+<!-- 四维雷达 -->
+<div class="card">
+  <h2 style="margin-top:0;">📊 四维度得分</h2>
+  <div class="radar-wrap">${radarSVG}</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:8px;">
+    ${dimItem("需求侧", scores.demand, 40, "#e67e22")}
+    ${dimItem("位置侧", scores.location, 25, "#27ae60")}
+    ${dimItem("竞争侧", scores.competition, 20, "#3498db")}
+    ${dimItem("财务侧", scores.financial, 15, "#9b59b6")}
+  </div>
+</div>
+
+<!-- 第一章：需求侧 -->
+${chapter1(metrics, bizType, conf)}
+<!-- 第二章：位置侧 -->
+${chapter2(metrics, data)}
+<!-- 第三章：竞争侧 -->
+${chapter3(metrics)}
+<!-- 第四章：财务侧 -->
+${chapter4(metrics, data, scores)}
+
+<!-- 第五章：综合建议 -->
+<div class="card">
+  <h2 style="margin-top:0;">💡 综合建议（${suggestions.length} 条）</h2>
+  <h3>✅ 优势</h3>
+  ${strengths.map(s => `<div class="suggestion-item good">${s.name} 得分率 ${Math.round(s.score/s.max*100)}%，这是你开饺子馆的先天优势——选址时可以把这点当成卖点（例如"社区密集 · 适合家庭聚餐"）</div>`).join("")}
+  <h3>⚠️ 短板</h3>
+  ${weaknesses.map(s => `<div class="suggestion-item bad">${s.name} 得分率 ${Math.round(s.score/s.max*100)}%，这是当前点位的明显短板——要么接受并在经营上想办法补，要么换点位</div>`).join("")}
+  <h3>🎯 行动建议（按优先级）</h3>
+  ${suggestions.map((s,i) => `<div class="suggestion-item"><b>${i+1}.</b> ${s}</div>`).join("")}
+</div>
+
+<!-- 第六章：模型说明 -->
+<div class="card">
+  <h2 style="margin-top:0;">📘 模型说明</h2>
+  <p class="muted">评估模型 <b>${modelVersion}</b> · 品类 <b>${ctx.categoryName}</b> · 评估日期 <b>${evalDate}</b></p>
+  <table class="metric-table">
+    <tr><th>维度</th><th>权重</th><th>评分阈值来源</th></tr>
+    <tr><td>需求侧</td><td>40</td><td>行业经验区间，需开店数据回测校准</td></tr>
+    <tr><td>位置侧</td><td>25</td><td>高德/百度 POI + 用户必填动线</td></tr>
+    <tr><td>竞争侧</td><td>20</td><td>百度 Place 评分字段，同品类定义：饺子/面食/中式快餐</td></tr>
+    <tr><td>财务侧</td><td>15</td><td>客单价/毛利率/固定成本来自餐饮白皮书区间</td></tr>
+  </table>
+  <p class="muted" style="margin-top:8px;">家庭户数估算、蹲点转化率、竞品强度归一化——这三项可信度为 ★★☆☆☆，最需要真实开店数据校准。</p>
+  ${poiCacheHits > 0 ? `<p class="muted">本次有 ${poiCacheHits} 个 POI 查询命中缓存（24h 内同坐标复用），未产生额外 API 调用。</p>` : ""}
+</div>
+
+<!-- 第七章：免责声明 -->
+<div class="card">
+  <h2 style="margin-top:0;">⚠️ 免责声明</h2>
+  <div class="disclaimer">
+    本评估基于公开 POI 数据、行业经验区间和您提供的输入信息生成，**不构成任何经营承诺**。<br>
+    1) 所有"估算"字段（家庭户数、日单量、盈亏单量等）均为经验系数推导值，非真实值；<br>
+    2) 地图 API 返回的 POI 可能不完整（老旧门店未录、新开门店未及时更新）；<br>
+    3) 动线可达性、主干道可见性、蹲点客流三项数据**必须您亲自实地确认**，模型无法替代；<br>
+    4) 租金、转让费、总预算为一次性输入，后续谈判结果会显著影响财务侧得分；<br>
+    5) 开饺子馆成功 = 选址 × 出品 × 运营 × 供应链，本评估仅覆盖选址维度的 ~40% 影响因子。<br>
+    正式签约前，请至少再做一次完整实地蹲点 + 周边门店访谈。
+  </div>
+</div>
+
+<!-- 终端结论卡（页面隐藏，供 agent 复制） -->
+<div id="terminal-card" style="display:none;font-family:monospace;white-space:pre;background:#1a1a1a;color:#f0f0f0;padding:16px;border-radius:8px;font-size:13px;">${terminalCard}</div>
+
+<div class="muted" style="text-align:center;margin:20px 0;">
+  数据来源：${providerName === "mock" ? "Mock 合成数据" : providerName === "amap" ? "高德 Web API" : "百度 Place API"}
+  · 模型 v${modelVersion}
+  · 评估日期 ${evalDate}
+  · 品类 ${ctx.categoryName}
+</div>
+  `;
+}
+
+function dimItem(name, score, max, color) {
+  const pct = Math.round(score / max * 100);
+  return `<div>
+    <div class="score-head"><b>${name}</b><span>${score}/${max}（${pct}%）</span></div>
+    <div class="score-bar"><div style="width:${pct}%;background:${color};"></div></div>
+  </div>`;
+}
+
+function renderRadarSVG(axes) {
+  const size = 240, cx = size/2, cy = size/2, R = 90;
+  const n = axes.length;
+  const points = axes.map((a,i) => {
+    const ang = -Math.PI/2 + i * 2*Math.PI/n;
+    return { x: cx + R*a.val*Math.cos(ang), y: cy + R*a.val*Math.sin(ang), lx: cx + (R+18)*Math.cos(ang), ly: cy + (R+18)*Math.sin(ang), label: a.label, color: a.color };
+  });
+  const rings = [0.25, 0.5, 0.75, 1.0].map(r => {
+    const pts = axes.map((a,i) => {
+      const ang = -Math.PI/2 + i * 2*Math.PI/n;
+      return `${cx + R*r*Math.cos(ang)},${cy + R*r*Math.sin(ang)}`;
+    }).join(" ");
+    return `<polygon points="${pts}" fill="none" stroke="#ddd" stroke-width="1"/>`;
+  }).join("");
+  const dataPoly = points.map(p => `${p.x},${p.y}`).join(" ");
+  return `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+    ${rings}
+    ${axes.map((_,i) => {
+      const ang = -Math.PI/2 + i * 2*Math.PI/n;
+      return `<line x1="${cx}" y1="${cy}" x2="${cx + R*Math.cos(ang)}" y2="${cy + R*Math.sin(ang)}" stroke="#eee"/>`;
+    }).join("")}
+    <polygon points="${dataPoly}" fill="rgba(230,126,34,0.25)" stroke="#e67e22" stroke-width="2"/>
+    ${points.map((p,i) => `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${axes[i].color}"/>`).join("")}
+    ${points.map(p => `<text x="${p.lx}" y="${p.ly}" text-anchor="middle" dominant-baseline="middle" font-size="13" fill="#555">${p.label}</text>`).join("")}
+  </svg>`;
+}
+
+// —— 四章详情 ——
+function chapter1(m, bizType, conf) {
+  const estDaily = (m.lunchDailyUnits !== null && m.dinnerDailyUnits !== null) ? (m.lunchDailyUnits + m.dinnerDailyUnits) : null;
+  let confNote = "";
+  if (conf === "B") confNote = `<div class="warn-note">⚠️ 本次置信度 ${conf}，需求侧日单量为商圈经验区间估算，<b>非真实蹲点推算</b>。建议务必亲自蹲点 1 天验证。</div>`;
+  return `<div class="card">
+    <h2 style="margin-top:0;">🍜 第一章 · 需求侧（客流 + 客群）</h2>
+    ${confNote}
+    <table class="metric-table">
+      <tr><th>指标</th><th>值</th><th>说明</th></tr>
+      <tr><td>商圈类型</td><td><b>${bizType}</b></td><td>基于 500m 内 POI 加权投票推断</td></tr>
+      <tr><td>500m 住宅 POI</td><td>${m.house_count_500} 个</td><td>含老旧小区未录入风险</td></tr>
+      <tr><td>1km 住宅 POI</td><td>${m.house_count_1000} 个</td><td>—</td></tr>
+      <tr><td>500m 家庭户数（估算）</td><td><b>${m.householdEstimate.toLocaleString()} 户</b></td><td>★★☆☆☆ 可信度（经验系数 800 户/小区）</td></tr>
+      <tr><td>午高峰预期日单量</td><td>${m.lunchDailyUnits !== null ? m.lunchDailyUnits + " 单" : "—（估算）"}</td><td>蹲点客流 × 30% 转化率 × 时段</td></tr>
+      <tr><td>晚高峰预期日单量</td><td>${m.dinnerDailyUnits !== null ? m.dinnerDailyUnits + " 单" : "—（估算）"}</td><td>蹲点客流 × 36% × 时段系数 1.2</td></tr>
+      <tr><td><b>预期总日单量</b></td><td><b>${estDaily !== null ? estDaily + " 单" : "—"}</b></td><td>饺子品类保本参考：纯堂食 120–240 单 / 含外卖 180–350 单</td></tr>
+    </table>
+  </div>`;
+}
+
+function chapter2(m, data) {
+  const walkMap = { direct: "地铁直连 · 无绕行", detour_le_100: "需绕行 ≤ 100m", detour_gt_100: "需绕行 > 100m", no_subway: "无地铁" };
+  const roadMap = { main_road_with_display: "临主干道 · 有门头展示", main_road_no_display: "临主干道 · 无门头展示", not_main_road: "不临主干道" };
+  return `<div class="card">
+    <h2 style="margin-top:0;">🚇 第二章 · 位置侧（可达性 + 可见性）</h2>
+    <table class="metric-table">
+      <tr><th>指标</th><th>值</th><th>说明</th></tr>
+      <tr><td>最近地铁距离</td><td>${m.nearestSubway !== null ? `<b>${Math.round(m.nearestSubway)} 米</b>` : "— 附近无地铁 POI"}</td><td>直线距离，Haversine 计算</td></tr>
+      <tr><td>500m 地铁站数</td><td>${m.subway_count} 个</td><td>★★★★★ 可信度</td></tr>
+      <tr><td>动线可达性</td><td>${walkMap[data.walk] || data.walk}</td><td>用户必填（模型无法推断绕行）</td></tr>
+      <tr><td>主干道可见性</td><td>${roadMap[data.road] || data.road}</td><td>用户必填</td></tr>
+      <tr><td>面积</td><td>${data.area ? data.area + " ㎡" : "未填"}</td><td>饺子店目标 60–100 ㎡</td></tr>
+    </table>
+  </div>`;
+}
+
+function chapter3(m) {
+  const dc = m.compDensity;
+  const isBlueOcean = dc === 0;
+  let densityNote = "";
+  if (isBlueOcean) densityNote = `<div class="warn-note">⚠️ 周边 <b>零家同品类</b>——这可能是蓝海（没人做 = 你先进来占坑），也可能是需求没被验证（附近人根本不吃饺子）。建议蹲点确认过店人数里有没有人在找饺子。</div>`;
+  return `<div class="card">
+    <h2 style="margin-top:0;">🥢 第三章 · 竞争侧（密度 + 强度）</h2>
+    ${densityNote}
+    <table class="metric-table">
+      <tr><th>指标</th><th>值</th><th>说明</th></tr>
+      <tr><td>同品类门店数（500m）</td><td><b>${dc} 家</b></td><td>饺子店 / 面食 / 中式快餐</td></tr>
+      <tr><td>竞品强度（评分 × 评论）</td><td>${m.compStrength !== null ? `<b>${m.compStrength}</b>` : "— 无竞品或无评分数据"}</td><td>★★★☆☆ 可信度（百度 Place 字段）</td></tr>
+      <tr><td>500m 餐饮</td><td>${m.dining_count} 家</td><td>餐饮服务密度，用于商圈类型推断</td></tr>
+      <tr><td>500m 写字楼</td><td>${m.office_count} 个</td><td>写字楼 = 午市白领客群</td></tr>
+      <tr><td>500m 学校</td><td>${m.school_count} 个</td><td>学校 = 放学高峰 + 家长</td></tr>
+    </table>
+  </div>`;
+}
+
+function chapter4(m, data, scores) {
+  const hasRent = scores._hasRent;
+  if (!hasRent) {
+    return `<div class="card" style="opacity:.85;">
+      <h2 style="margin-top:0;">💰 第四章 · 财务侧（租金安全垫 + 回本压力）</h2>
+      <div class="warn-note">⚠️ <b>财务维度未纳入本次评分</b>（未提供月租金）。当前总分仅基于位置 + 竞争 + 需求三维（满分 85），已归一化展示。财务章节将在您提供租金后重新计算。</div>
+      <p class="muted">💡 补齐月租金后，财务侧 15 分将纳入总分计算，盈亏线和租金占比才会生效。在此之前，<b>位置可行性可以参考，但不能替代财务安全垫判断</b>。</p>
+      <p class="muted">作为参考，按行业中位数估算：<b>盈亏单量 ≈ ${m.breakEvenUnits} 单/日</b>（月固定成本 ${m.fixedCostWan.toFixed(1)} 万 ÷ 客单价 ${m.price} × 毛利率 65% × 30 天）。</p>
+    </div>`;
+  }
+  let rentNote = "";
+  if (m.rentRatio !== null && m.rentRatio > 0.22) rentNote = `<div class="warn-note">⚠️ 租金占营收比 ${(m.rentRatio*100).toFixed(1)}% 偏高，超过餐饮行业常见的 15–22% 安全区间。</div>`;
+  return `<div class="card">
+    <h2 style="margin-top:0;">💰 第四章 · 财务侧（租金安全垫 + 回本压力）</h2>
+    ${rentNote}
+    <table class="metric-table">
+      <tr><th>指标</th><th>值</th><th>说明</th></tr>
+      <tr><td>月租金</td><td>${data.rent.toLocaleString()} 元</td><td>—</td></tr>
+      <tr><td>客单价</td><td>${m.price} 元</td><td>饺子经验区间 25–35 元</td></tr>
+      <tr><td>租金占营收比</td><td><b>${(m.rentRatio*100).toFixed(1)}%</b></td><td>≤15% 安全，>30% 危险</td></tr>
+      <tr><td>盈亏单量（保本日单量）</td><td><b>${m.breakEvenUnits} 单/日</b></td><td>固定成本 ${m.fixedCostWan.toFixed(1)} 万 ÷（客单价 ${m.price} × 毛利率 65% × 30 天）</td></tr>
+      <tr><td>盈亏单量达成率</td><td>${m.breakEvenAchieve !== null ? `<b>${(m.breakEvenAchieve*100).toFixed(0)}%</b>` : "—"}</td><td>≥150% 安全，<100% 会亏</td></tr>
+    </table>
+  </div>`;
+}
+
+// —— 终端结论卡（monospace 文本）——
+function buildTerminalCard(addr, total, emoji, conf, cfNote, scores, D, strengths, weaknesses, topSugs) {
+  const pad = (s, n) => String(s).padEnd(n, " ");
+  const w = 44;
+  const line = "╔" + "═".repeat(w-2) + "╗";
+  const sep  = "╠" + "═".repeat(w-2) + "╣";
+  const end  = "╚" + "═".repeat(w-2) + "╝";
+  const row  = (left, right) => "║ " + pad(left, 12) + pad(right, w-16) + "║";
+  let out = line + "\n";
+  out += "║ " + pad("🥟 饺子馆选址评估 · 结论卡", w-4) + "║\n";
+  out += sep + "\n";
+  out += row("点位", addr.slice(0, 28)) + "\n";
+  out += row("总分", `${total}/100  ${emoji}`) + "\n";
+  out += row("置信度", conf + " " + cfNote.slice(0, 20)) + "\n";
+  out += sep + "\n";
+  out += row("需求侧", `${scores.demand}/40  (${Math.round(scores.demand/40*100)}%)`) + "\n";
+  out += row("位置侧", `${scores.location}/25  (${Math.round(scores.location/25*100)}%)`) + "\n";
+  out += row("竞争侧", `${scores.competition}/20  (${Math.round(scores.competition/20*100)}%)`) + "\n";
+  out += row("财务侧", scores._hasRent ? `${scores.financial}/15  (${Math.round(scores.financial/15*100)}%)` : "— 未纳入") + "\n";
+  out += sep + "\n";
+  out += row("优势", strengths[0].name + " 得分率 " + Math.round(strengths[0].score/strengths[0].max*100) + "%") + "\n";
+  out += row("", strengths[1].name + " 得分率 " + Math.round(strengths[1].score/strengths[1].max*100) + "%") + "\n";
+  out += row("短板", weaknesses[0].name + " 得分率 " + Math.round(weaknesses[0].score/weaknesses[0].max*100) + "%") + "\n";
+  out += row("", weaknesses[1].name + " 得分率 " + Math.round(weaknesses[1].score/weaknesses[1].max*100) + "%") + "\n";
+  out += sep + "\n";
+  topSugs.forEach((s,i) => { out += row(`建议 ${i+1}`, s.slice(0, 28)) + "\n"; });
+  out += end;
+  return out;
+}
+
+function downloadHTML(content, filename) {
+  const blob = new Blob([content], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// ============================================================
+//  7. 示例加载 + Provider UI
+// ============================================================
+function loadExample(which) {
+  const f = document.getElementById("assess-form");
+  // 先重置
+  ["f-rent","f-area","f-wd-lunch","f-wd-dinner","f-we-lunch","f-we-dinner","f-price","f-budget","f-transfer","f-exp"].forEach(id => { f[id].value = ""; });
+
+  if (which === "good") {
+    f["f-address"].value = "北京市朝阳区望京东路 6 号";
+    f["f-rent"].value = 8000;
+    f["f-area"].value = 85;
+    f["f-wd-lunch"].value = 9; f["f-wd-dinner"].value = 11; f["f-we-lunch"].value = 13; f["f-we-dinner"].value = 15;
+    f["f-walk"].value = "direct"; f["f-road"].value = "main_road_with_display";
+    document.getElementById("provider-select").value = "mock";
+    // Mock provider 的 scene 根据地址智能推断为 community_good
+  } else if (which === "warn") {
+    f["f-address"].value = "北京市朝阳区国贸 CBD 核心区 88 号";
+    f["f-rent"].value = 15000;
+    f["f-area"].value = 70;
+    f["f-wd-lunch"].value = 10; f["f-wd-dinner"].value = 8; f["f-we-lunch"].value = 7; f["f-we-dinner"].value = 10;
+    f["f-walk"].value = "detour_le_100"; f["f-road"].value = "main_road_with_display";
+    document.getElementById("provider-select").value = "mock";
+  } else if (which === "bad") {
+    f["f-address"].value = "北京市顺义区偏远工业园 3 号楼";
+    f["f-rent"].value = 4000;
+    f["f-area"].value = 60;
+    f["f-wd-lunch"].value = 2; f["f-wd-dinner"].value = 2; f["f-we-lunch"].value = 3; f["f-we-dinner"].value = 4;
+    f["f-walk"].value = "no_subway"; f["f-road"].value = "not_main_road";
+    document.getElementById("provider-select").value = "mock";
+  } else if (which === "missing") {
+    f["f-address"].value = "上海市浦东新区张江路 100 号";
+    // 故意不填租金和客流
+    f["f-area"].value = 80;
+    f["f-walk"].value = "detour_le_100"; f["f-road"].value = "not_main_road";
+    document.getElementById("provider-select").value = "mock";
+  }
+  toggleKeyInputs();
+}
+
+function toggleKeyInputs() {
+  const sel = document.getElementById("provider-select").value;
+  const amap = document.getElementById("amap-key");
+  const baidu = document.getElementById("baidu-key");
+  const status = document.getElementById("provider-status");
+  amap.style.display = (sel === "amap") ? "" : "none";
+  baidu.style.display = (sel === "baidu") ? "" : "none";
+  if (sel === "mock") status.textContent = "当前：Mock 模拟数据";
+  else if (sel === "amap") status.textContent = "当前：高德 Web API（留 Key 则自动回落 Mock）";
+  else status.textContent = "当前：百度 Place API（留 Key 则自动回落 Mock）";
+  amap.className = "tag tag-amap"; baidu.className = "tag tag-baidu";
+}
+
+// 页面加载完成后初始化
+toggleKeyInputs();
+</script>
+
+</body>
+</html>

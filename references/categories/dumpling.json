@@ -1,0 +1,97 @@
+{
+  "category_id": "dumpling",
+  "category_name": "饺子",
+  "version": "1.4",
+  "_changelog": "v1.4: 缺数据统一用剔除+剩余权重归一；compStrengthValid=false 时 strengthS 剔除不再给中性 5 分；新增 demand_bottleneck_penalty（houseS≥8 且 avg(lunchS,dinnerS)≤4 扣 5 分）；新增 weights section 统一所有子项权重；lunchDaily=null → lunchS 剔除归一，不再给 0 分",
+  "metrics_conversion_rate": {
+    "lunch_order_rate": 0.30,
+    "dinner_order_rate": 0.36,
+    "dinner_time_factor": 1.2,
+    "max_overall_conversion": 0.30,
+    "biz_type_conversion_factor": { "社区": 1.0, "商务": 0.85, "商业": 0.75, "混合": 0.9 },
+    "_usage_note": "全链路转化率 = min(品类默认, 30%) × 商圈系数，封顶 30%"
+  },
+  "capacity_constants": {
+    "seat_per_area": 0.45, "turnover_rate": 5, "dinein_ratio": 0.85,
+    "takeout_ports": 2, "takeout_per_hour": 40, "takeout_hours": 6,
+    "area_min_for_capacity": 40, "takeout_saturation_factor": 0.4,
+    "_usage_note": "产能封顶 = min(需求推算, 堂产 + 外卖产)；外卖产保守取 40% 饱和"
+  },
+  "flow_expansion": {
+    "total_blocks": 21, "input_blocks": 4, "fill_factor": 0.5,
+    "_usage_note": "4时段输入→21块营业×0.5h，非输入时段按50%外推；effectiveBlocks=12.5"
+  },
+  "household_estimation": {
+    "per_residential_poi": 800, "per_area_m2": 37.5, "default_households": 3000
+  },
+  "subway_fallback": { "nearest_subway_default_m": 500 },
+  "competition_strength": {
+    "comment_log_base": 800,
+    "weight_substitute_factor": 0.5,
+    "null_action": "exclude",
+    "_usage_note": "compStrength 有效=extra传入非null/NaN 或 mainCount>0且有rated或comments样本。否则剔除 strengthS，density 按 20/10=2 归一到 competition 权重"
+  },
+  "demand_bottleneck_penalty": {
+    "houseS_min": 8,
+    "avg_peakS_max": 4,
+    "penalty_score": 5,
+    "_usage_note": "高住户低人流冲突：500m 户数多但实测过店少，通常是铺位不在主街。houseS≥8 且 lunchS/dinnerS 平均≤4 时 demand 侧扣 5 分"
+  },
+  "weights": {
+    "demand": 40, "location": 25, "competition": 20, "financial": 15,
+    "demand_breakdown":   { "lunch_units": 15, "dinner_units": 15, "households": 10 },
+    "location_breakdown": { "subway_distance": 10, "walkability": 10, "road_visibility": 5 },
+    "competition_breakdown": { "density": 10, "strength": 10 },
+    "financial_breakdown": { "rent_ratio": 10, "breakeven": 5 }
+  },
+  "financial_constants": {
+    "avg_price_min": 25, "avg_price_max": 35, "avg_price_default": 30,
+    "margin_dinein_min": 0.62, "margin_dinein_max": 0.68, "margin_dinein_default": 0.65,
+    "margin_takeout_min": 0.50, "margin_takeout_max": 0.58,
+    "platform_commission_min": 0.20, "platform_commission_max": 0.25,
+    "fixed_cost_min_wan": 2.5, "fixed_cost_max_wan": 5.0,
+    "labor_estimate_wan": 1.5, "utility_estimate_wan": 0.5,
+    "break_even_dinein_min": 120, "break_even_dinein_max": 240,
+    "break_even_takeout_min": 180, "break_even_takeout_max": 350,
+    "anomaly_thresholds": {
+      "rent_ratio_min": 0.03, "rent_ratio_max": 0.40, "rev_per_area_max": 8000,
+      "breakeven_achieve_max": 10, "daily_orders_max_mult": 1.10,
+      "_note": "触发任何一条 → verdict 改为 模型异常"
+    }
+  },
+  "amap_poi_types": {
+    "residential":   { "code": "120300", "name": "住宅小区" },
+    "office":        { "code": "120201", "name": "商务办公楼" },
+    "school":        { "code": "141200", "name": "学校" },
+    "dining":        { "code": "050000", "name": "餐饮服务" },
+    "subway":        { "code": "150500", "name": "地铁站" },
+    "competitor":    { "code": "050100|050101|050102", "name": "饺子/面食/中式快餐" }
+  },
+  "competitor_keywords": {
+    "direct": { "amap_code": "050101", "name": "饺子店" },
+    "substitute": { "amap_code": "050102", "name": "面食/面馆" }
+  },
+  "scoring_thresholds": {
+    "demand": {
+      "lunch_daily_units":  [{"min":60,"score":15},{"min":40,"score":11},{"min":25,"score":7},{"min":0,"score":3}],
+      "dinner_daily_units": [{"min":72,"score":15},{"min":48,"score":11},{"min":30,"score":7},{"min":0,"score":3}],
+      "household_500m":     [{"min":3000,"score":10},{"min":1500,"score":7},{"min":800,"score":4},{"min":1,"score":1},{"min":0,"score":0}]
+    },
+    "location": {
+      "subway_distance":  [{"max":200,"score":10},{"max":400,"score":7},{"max":600,"score":4},{"max":99999,"score":1}],
+      "walkability":      { "direct": 10, "detour_le_100": 7, "detour_gt_100": 3, "no_subway": 2 },
+      "road_visibility":  { "main_road_with_display": 5, "main_road_no_display": 2, "not_main_road": 1, "_default_null_score": 0 }
+    },
+    "competition": {
+      "competitor_density_real":    [{"dc_eq":0,"score":10},{"dc_max":2,"score":7},{"dc_max":5,"score":4},{"dc_max":9999,"score":1}],
+      "competitor_density_no_data": { "score": 0, "note": "无真实 POI 数据，不加分" },
+      "competitor_strength":        [{"min":7.0,"score":10},{"min":5.0,"score":6},{"min":3.0,"score":3},{"min":0.01,"score":1}],
+      "_note_v1.4": "不再有 competitor_strength_null 条目；v1.4 起无有效评分数据时 strengthS 剔除（null_action=exclude），density 归一到 competition 权重"
+    },
+    "financial": {
+      "rent_revenue_ratio":    [{"max":0.15,"score":10},{"max":0.22,"score":7},{"max":0.30,"score":4},{"max":99,"score":1}],
+      "breakeven_achievement": [{"min":1.5,"score":5},{"min":1.2,"score":3},{"min":1.0,"score":1},{"min":0,"score":0}]
+    }
+  },
+  "verdict_thresholds": { "recommend": 80, "caution": 60 }
+}

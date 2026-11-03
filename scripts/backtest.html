@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+<meta charset="UTF-8">
+<title>🥟 饺子馆选址 · 回测工具</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f6f8;color:#222;padding:24px;}
+  h1{font-size:22px;margin-bottom:8px;}
+  .muted{color:#888;font-size:13px;}
+  .card{background:#fff;border-radius:10px;padding:20px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+  label{font-size:13px;font-weight:600;}
+  input[type=file],input[type=button],button{padding:8px 16px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer;font-size:13px;}
+  button.primary{background:#2196f3;color:#fff;border-color:#1976d2;}
+  button.primary:hover{background:#1976d2;}
+  button.danger{background:#fff;border-color:#e57373;color:#c62828;}
+  textarea{width:100%;height:200px;font-family:monospace;font-size:12px;border:1px solid #ddd;border-radius:6px;padding:10px;resize:vertical;}
+  textarea:focus{outline:none;border-color:#2196f3;}
+  table{width:100%;border-collapse:collapse;font-size:12px;margin-top:12px;}
+  th,td{border:1px solid #e0e0e0;padding:6px 8px;text-align:left;white-space:nowrap;}
+  th{background:#fafafa;font-weight:600;position:sticky;top:0;}
+  tr:nth-child(even){background:#fafafa;}
+  tr:hover{background:#f0f7ff;}
+  .verdict-pass{background:#e8f5e9;color:#2e7d32;}
+  .verdict-warn{background:#fff8e1;color:#f57f17;}
+  .verdict-fail{background:#ffebee;color:#c62828;}
+  .verdict-anomaly{background:#fce4ec;color:#880e4f;}
+  .hit-yes{color:#2e7d32;font-weight:600;}
+  .hit-no{color:#c62828;font-weight:600;}
+  .hit-na{color:#9e9e9e;}
+  /* 汇总面板 */
+  .summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-top:10px;}
+  .kpi{background:#fafafa;border-radius:8px;padding:12px;text-align:center;border:1px solid #eee;}
+  .kpi .num{font-size:24px;font-weight:800;color:#1976d2;}
+  .kpi .lbl{font-size:12px;color:#888;margin-top:4px;}
+  .confusion{display:grid;grid-template-columns:100px 1fr 1fr;gap:6px;margin-top:10px;}
+  .confusion .h{background:#f5f5f5;padding:8px;font-weight:600;text-align:center;font-size:13px;border-radius:4px;}
+  .confusion .c{padding:12px;text-align:center;border-radius:4px;font-weight:600;font-size:18px;}
+  .cs{background:#c8e6c9;color:#1b5e20;}
+  .cf{background:#ffcdd2;color:#b71c1c;}
+  .cf2{background:#ffcdd2;color:#b71c1c;}
+  .css{background:#c8e6c9;color:#1b5e20;}
+  .toolbar{display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:center;}
+  .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;}
+  .badge-A{background:#e3f2fd;color:#1565c0;}
+  .badge-B{background:#fff8e1;color:#e65100;}
+  .badge-C{background:#ffebee;color:#c62828;}
+  .badge-D{background:#f3e5f5;color:#7b1fa2;}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <h1>🥟 饺子馆选址 · 回测工具 <span class="muted">v1.1</span></h1>
+  <p class="muted">导入案例库 CSV → 跑引擎评分 → 导出结果 CSV · 零依赖，双击可开</p>
+</div>
+
+<div class="card">
+  <h3>① 输入数据</h3>
+  <div class="toolbar">
+    <input type="file" id="csv-file" accept=".csv" />
+    <button onclick="runFromText()" class="primary">粘贴文本运行</button>
+    <button onclick="loadDemo()">载入 3 行示例</button>
+    <button onclick="document.getElementById('csv-text').value=''">清空</button>
+  </div>
+  <textarea id="csv-text" placeholder="粘贴 CSV（UTF-8，第一行为表头）...&#10;或点击上面的 载入 3 行示例 快速体验"></textarea>
+</div>
+
+<div class="card" id="summary-card" style="display:none;">
+  <h3>② 回测汇总</h3>
+  <div id="summary"></div>
+  <div style="margin-top:12px;">
+    <button onclick="exportCSV()" class="primary">📥 导出结果 CSV</button>
+    <a id="csv-download" style="display:none;"></a>
+  </div>
+</div>
+
+<div class="card" id="detail-card" style="display:none;">
+  <h3>③ 逐行明细 <span class="muted" id="detail-count"></span></h3>
+  <div style="overflow-x:auto;">
+    <table id="result-table"></table>
+  </div>
+</div>
+
+<!-- 引入 engine.js（与 index.html 共享同一份） -->
+<script src="engine.js"></script>
+<script>
+const DEMO_CSV = `城市,详细地址,经度,纬度,商圈名,使用面积,月租金,工作日午客流,工作日晚客流,周末午客流,周末晚客流,地铁距离,动线类型,是否临主干道,实际开业日期,实际月均日单量,实际客单价,12个月是否存活,关店日期
+北京,朝阳区望京SOHO T1,116.4700,39.9950,望京,80,12000,10,12,15,18,202,直连地铁,是,2026-03-01,55,30,否,2026-09-15
+上海,浦东新区陆家嘴环路1000号,121.4900,31.2300,陆家嘴,120,28000,25,30,40,45,150,直连地铁,是,2025-12-01,120,38,是,
+广州,天河区岗顶BRT旁,113.3600,23.1300,岗顶,60,8000,5,8,10,12,300,绕行≤100m,否,2026-01-01,35,28,否,2026-07-30`;
+
+function loadDemo() {
+  document.getElementById('csv-text').value = DEMO_CSV;
+}
+
+document.getElementById('csv-file').addEventListener('change', e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  const reader = new FileReader();
+  reader.onload = ev => { document.getElementById('csv-text').value = ev.target.result; };
+  reader.readAsText(f, 'UTF-8');
+});
+
+// 简易 CSV 解析（支持双引号转义）
+function parseCSV(text) {
+  text = text.replace(/^\uFEFF/, ''); // 去 BOM
+  const rows = [];
+  let buf = [], row = [], inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQ) {
+      if (c === '"' && text[i+1] === '"') { buf.push(''); i++; }
+      else if (c === '"') inQ = false;
+      else buf.push(c);
+    } else {
+      if (c === '"') inQ = true;
+      else if (c === ',') { row.push(buf.join('')); buf = []; }
+      else if (c === '\n') { row.push(buf.join('')); rows.push(row); row = []; buf = []; }
+      else if (c === '\r') { /* skip */ }
+      else buf.push(c);
+    }
+  }
+  if (buf.length || row.length) { row.push(buf.join('')); rows.push(row); }
+  return rows.filter(r => r.length > 0 && r.some(c => c.trim() !== ''));
+}
+
+function runFromText() {
+  const text = document.getElementById('csv-text').value.trim();
+  if (!text) { alert('请先粘贴或上传 CSV'); return; }
+
+  const rawRows = parseCSV(text);
+  if (rawRows.length < 2) { alert('至少需要表头 + 1 行数据'); return; }
+
+  const { cleanHeader, map } = ENGINE.buildHeaderMap(rawRows[0]);
+  const parsedRows = rawRows.slice(1).map(r => ENGINE.parseCSVRow(r, map));
+
+  const { rows, summary } = ENGINE.backtest(parsedRows);
+
+  // 渲染汇总
+  document.getElementById('summary-card').style.display = 'block';
+  document.getElementById('detail-card').style.display = 'block';
+
+  const conf = summary.byConfidence;
+  const mt = summary.byTier;
+  const cm = summary.confusionMatrix;
+  const alert = summary.sampleAlert;
+
+  const tierHtml = Object.entries(mt).map(([tier, v]) => {
+    if (v.count === 0) return `<tr><td>${tier}</td><td colspan="4" class="muted">无样本</td></tr>`;
+    const w95 = v.wilson95;
+    const w95Str = w95 ? `${(w95.low*100).toFixed(0)}% – ${(w95.high*100).toFixed(0)}%` : '—';
+    return `<tr>
+      <td>${tier}</td>
+      <td>${v.count}</td>
+      <td>${v.hit}</td>
+      <td>${v.rate !== null ? (v.rate*100).toFixed(1)+'%' : '—'}</td>
+      <td class="muted" style="font-size:11px;">95%CI: ${w95Str}</td>
+    </tr>`;
+  }).join('');
+
+  let alertHtml = '';
+  if (alert) {
+    const bg = alert.level === 'danger' ? '#ffebee' : '#fff8e1';
+    const col = alert.level === 'danger' ? '#c62828' : '#e67e22';
+    alertHtml = `<div style="background:${bg};border-left:4px solid ${col};padding:10px;border-radius:4px;margin-bottom:14px;font-weight:600;color:${col};">⚠️ ${alert.msg}</div>`;
+  }
+
+  // 总体命中率 Wilson 区间
+  let totalWilsonStr = '';
+  if (summary.hitWilson95) {
+    totalWilsonStr = `<span class="muted" style="font-size:12px;">95% CI: ${(summary.hitWilson95.low*100).toFixed(0)}% – ${(summary.hitWilson95.high*100).toFixed(0)}%</span>`;
+  }
+
+  document.getElementById('summary').innerHTML = `
+    ${alertHtml}
+    <div class="summary-grid">
+      <div class="kpi"><div class="num">${summary.total}</div><div class="lbl">总案例数 N</div></div>
+      <div class="kpi"><div class="num">${summary.assessable}</div><div class="lbl">可判样本数 n</div></div>
+      <div class="kpi"><div class="num">${summary.portraitOnly}</div><div class="lbl">仅商圈画像</div></div>
+      <div class="kpi"><div class="num" style="color:${summary.hitRate && summary.hitRate >= 0.7 ? '#2e7d32' : '#c62828'}">
+        ${summary.hitRate !== null ? (summary.hitRate*100).toFixed(1)+'%' : '—'}
+      </div><div class="lbl">总体命中率</div></div>
+    </div>
+    <div style="margin-top:4px;text-align:center;">${totalWilsonStr}</div>
+
+    <div style="margin-top:14px;">
+      <b>按档位分组命中率</b>
+      <table>
+        <tr><th>档位</th><th>案例数</th><th>命中数</th><th>命中率</th><th>Wilson 95% CI</th></tr>
+        ${tierHtml}
+      </table>
+    </div>
+
+    <div style="margin-top:14px;">
+      <b>混淆矩阵</b>
+      <div class="confusion">
+        <div></div>
+        <div class="h">实际存活</div>
+        <div class="h">实际倒闭</div>
+        <div class="h">✅ 建议开</div>
+        <div class="c cs">${cm.open_survive}</div>
+        <div class="c cf">${cm.open_close}</div>
+        <div class="h">❌ 不建议</div>
+        <div class="c cf2">${cm.close_survive}</div>
+        <div class="c css">${cm.close_close}</div>
+      </div>
+      <p class="muted" style="margin-top:8px;font-size:11px;">绿色=命中 · 红色=未命中 · TN=不建议→倒闭 · TP=建议开→存活 · FN=不建议→存活(漏判) · FP=建议开→倒闭(误判)</p>
+    </div>
+
+    <div style="margin-top:14px;">
+      <b>置信度分布</b>
+      <span class="badge badge-A">A 完整 ${conf["A"]||0}</span>
+      <span class="badge badge-B">B 部分 ${conf["B"]||0}</span>
+      <span class="badge badge-C">C 仅商圈 ${conf["C"]||0}</span>
+      <span class="badge badge-D">D 商圈+财务 ${conf["D"]||0}</span>
+      <span style="margin-left:12px;" class="muted">模型异常：${summary.anomaly}</span>
+    </div>
+  `;
+
+  // 渲染明细
+  const tb = document.getElementById('result-table');
+  document.getElementById('detail-count').textContent = `（共 ${rows.length} 行）`;
+  tb.innerHTML = `
+    <tr>
+      <th>#</th><th>点位</th><th>置信</th>
+      <th>预测结论</th><th>总分</th><th>档位分</th>
+      <th>需求</th><th>位置</th><th>竞争</th><th>财务</th>
+      <th>实际结果</th><th>命中</th><th>偏差原因</th>
+    </tr>` +
+    rows.map((r,i) => {
+      const verdictCls = r.predictVerdict.includes('建议开') ? 'verdict-pass'
+        : r.predictVerdict.includes('不建议') ? 'verdict-fail'
+        : r.predictVerdict.includes('仅商圈') || r.predictVerdict.includes('模型异常') ? 'verdict-anomaly'
+        : 'verdict-warn';
+      const hitCls = r.hit === '命中' ? 'hit-yes' : r.hit === '未命中' ? 'hit-no' : 'hit-na';
+      return `<tr>
+        <td>${i+1}</td>
+        <td title="${r.city||''} · ${r.bizDist||''}">${(r.address||'').substring(0,24)}</td>
+        <td><span class="badge badge-${r.confidence}">${r.confidence}</span></td>
+        <td class="${verdictCls}">${r.predictVerdict}</td>
+        <td><b>${r.predictScore !== null ? r.predictScore : '—'}</b></td>
+        <td>${r.predictScale || '—'}</td>
+        <td>${r.predictDemand ?? '—'}</td>
+        <td>${r.predictLocation ?? '—'}</td>
+        <td>${r.predictCompetition ?? '—'}</td>
+        <td>${r.predictFinancial ?? '—'}</td>
+        <td>${r.actual}</td>
+        <td class="${hitCls}">${r.hit}</td>
+        <td class="muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;">${r.hitReason}</td>
+      </tr>`;
+    }).join('');
+
+  // 缓存 rows 给 exportCSV 用
+  window.__BACKTEST_ROWS__ = rows;
+}
+
+function exportCSV() {
+  const rows = window.__BACKTEST_ROWS__;
+  if (!rows || !rows.length) { alert('请先跑一次回测'); return; }
+  const csv = ENGINE.backtestRowsToCSV(rows);
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `backtest_result_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// 页面加载提示
+document.addEventListener('DOMContentLoaded', () => {
+  console.log('Backtest 工具就绪 · ENGINE v' + (ENGINE.loadCategory && ENGINE.loadCategory('dumpling').version || 'unknown'));
+});
+</script>
+</body></html>

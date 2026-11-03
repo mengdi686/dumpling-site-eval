@@ -1,0 +1,35 @@
+# ===== 构建产物 / 缓存 =====
+node_modules/
+dist/
+build/
+.cache/
+
+# ===== 日志 =====
+*.log
+npm-debug.log*
+
+# ===== 系统文件 =====
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ===== 编辑器 =====
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ===== 环境 / Key（严禁提交真实 API key）=====
+.env
+.env.local
+.env.*.local
+*.key
+secrets.json
+# 高德/百度 key 只在运行时通过页面输入框填写，不持久化到文件
+
+# ===== 临时导出 =====
+reports/          # 临时导出的评估报告 HTML
+exports/          # 回测 CSV 临时导出
+*.tmp.*
+*.bak.*
